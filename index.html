@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NAVITAEDU Tools</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="logo-wrap">
+        <img src="logo.png" alt="NAVITAEDU logo" class="logo" />
+      </div>
+      <nav class="menu">
+        <button class="menu-item active" data-tool="compress">
+          <span class="menu-icon">&#128229;</span> Compress PDF
+        </button>
+        <button class="menu-item" data-tool="merge">
+          <span class="menu-icon">&#128206;</span> Merge PDF
+        </button>
+        <button class="menu-item" data-tool="image">
+          <span class="menu-icon">&#128247;</span> Image to PDF
+        </button>
+      </nav>
+      <div class="sidebar-footer">100% in your browser. No uploads to any server.</div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main">
+      <!-- Compress PDF -->
+      <section class="tool active" id="tool-compress">
+        <h1>Compress PDF</h1>
+        <p class="tool-desc">Upload one PDF. It is re-rendered and images are re-encoded at reduced quality until the file is under 8&nbsp;MB.</p>
+
+        <label class="dropzone" id="drop-compress">
+          <input type="file" id="file-compress" accept="application/pdf" hidden />
+          <span class="dropzone-text">Click to choose a PDF, or drag it here</span>
+          <span class="dropzone-file" id="name-compress"></span>
+        </label>
+
+        <button class="btn" id="run-compress">Execute</button>
+
+        <div class="progress" id="progress-compress" hidden>
+          <div class="progress-bar"><div class="progress-fill" id="fill-compress"></div></div>
+          <span class="progress-text" id="status-compress"></span>
+        </div>
+
+        <div class="result" id="result-compress"></div>
+      </section>
+
+      <!-- Merge PDF -->
+      <section class="tool" id="tool-merge">
+        <h1>Merge PDF</h1>
+        <p class="tool-desc">Upload several PDFs. They are combined into one file in the order you added them.</p>
+
+        <label class="dropzone" id="drop-merge">
+          <input type="file" id="file-merge" accept="application/pdf" multiple hidden />
+          <span class="dropzone-text">Click to choose PDFs, or drag them here</span>
+          <span class="dropzone-file" id="name-merge"></span>
+        </label>
+
+        <button class="btn" id="run-merge">Execute</button>
+
+        <div class="progress" id="progress-merge" hidden>
+          <div class="progress-bar"><div class="progress-fill" id="fill-merge"></div></div>
+          <span class="progress-text" id="status-merge"></span>
+        </div>
+
+        <div class="result" id="result-merge"></div>
+      </section>
+
+      <!-- Image to PDF -->
+      <section class="tool" id="tool-image">
+        <h1>Image to PDF</h1>
+        <p class="tool-desc">Upload multiple JPG or PNG images. Each image becomes one page of a new PDF.</p>
+
+        <label class="dropzone" id="drop-image">
+          <input type="file" id="file-image" accept="image/jpeg,image/png" multiple hidden />
+          <span class="dropzone-text">Click to choose images, or drag them here</span>
+          <span class="dropzone-file" id="name-image"></span>
+        </label>
+
+        <button class="btn" id="run-image">Execute</button>
+
+        <div class="progress" id="progress-image" hidden>
+          <div class="progress-bar"><div class="progress-fill" id="fill-image"></div></div>
+          <span class="progress-text" id="status-image"></span>
+        </div>
+
+        <div class="result" id="result-image"></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Libraries from free CDNs -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
