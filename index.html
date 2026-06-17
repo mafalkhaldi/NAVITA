@@ -5,6 +5,49 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>NAVITAEDU Tools</title>
   <link rel="stylesheet" href="style.css" />
+  <!-- Scoped styles for the Split PDF tool's extra controls.
+       Everything is namespaced under #tool-split so the existing
+       three tools are completely unaffected. -->
+  <style>
+    #tool-split .split-options {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin: 16px 0;
+    }
+    #tool-split .split-option {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      cursor: pointer;
+      line-height: 1.4;
+    }
+    #tool-split .split-option input[type="radio"] {
+      margin-top: 3px;
+    }
+    #tool-split .split-option .opt-title {
+      font-weight: 600;
+    }
+    #tool-split .split-option .opt-desc {
+      display: block;
+      opacity: 0.75;
+      font-size: 0.9em;
+    }
+    #tool-split .range-wrap {
+      margin: 4px 0 0 28px;
+    }
+    #tool-split .range-wrap input[type="text"] {
+      width: 100%;
+      max-width: 360px;
+      padding: 10px 12px;
+      font: inherit;
+      box-sizing: border-box;
+      border: 1px solid rgba(0, 0, 0, 0.25);
+      border-radius: 6px;
+    }
+    #tool-split .range-wrap[hidden] { display: none; }
+    #tool-split .result a { display: inline-block; margin-top: 8px; }
+  </style>
 </head>
 <body>
   <div class="app">
@@ -22,6 +65,9 @@
         </button>
         <button class="menu-item" data-tool="image">
           <span class="menu-icon">&#128247;</span> Image to PDF
+        </button>
+        <button class="menu-item" data-tool="split">
+          <span class="menu-icon">&#9986;&#65039;</span> Split PDF
         </button>
       </nav>
       <div class="sidebar-footer">100% in your browser. No uploads to any server.</div>
@@ -91,12 +137,249 @@
 
         <div class="result" id="result-image"></div>
       </section>
+
+      <!-- Split PDF -->
+      <section class="tool" id="tool-split">
+        <h1>Split PDF</h1>
+        <p class="tool-desc">Upload one PDF, then either split every page into its own file (downloaded together as a ZIP) or extract just the pages you want into a single new PDF.</p>
+
+        <label class="dropzone" id="drop-split">
+          <input type="file" id="file-split" accept="application/pdf" hidden />
+          <span class="dropzone-text">Click to choose a PDF, or drag it here</span>
+          <span class="dropzone-file" id="name-split"></span>
+        </label>
+
+        <div class="split-options">
+          <label class="split-option">
+            <input type="radio" name="split-mode" value="every" checked />
+            <span>
+              <span class="opt-title">Split every page</span>
+              <span class="opt-desc">Each page becomes its own PDF. All pages are downloaded together as a single ZIP file.</span>
+            </span>
+          </label>
+          <label class="split-option">
+            <input type="radio" name="split-mode" value="extract" />
+            <span>
+              <span class="opt-title">Extract pages</span>
+              <span class="opt-desc">Pick specific pages, e.g. <code>1-3, 5, 8-10</code>, and get one new PDF with just those pages.</span>
+            </span>
+          </label>
+          <div class="range-wrap" id="range-wrap-split" hidden>
+            <input type="text" id="range-split" placeholder="e.g. 1-3, 5, 8-10" />
+          </div>
+        </div>
+
+        <button class="btn" id="run-split">Execute</button>
+
+        <div class="progress" id="progress-split" hidden>
+          <div class="progress-bar"><div class="progress-fill" id="fill-split"></div></div>
+          <span class="progress-text" id="status-split"></span>
+        </div>
+
+        <div class="result" id="result-split"></div>
+      </section>
     </main>
   </div>
 
   <!-- Libraries from free CDNs -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="app.js"></script>
+
+  <!-- Split PDF tool logic (self-contained; does not touch the other tools).
+       Tab switching is handled by app.js via the data-tool / tool-id
+       convention, so this tab activates exactly like the existing three. -->
+  <script>
+  (function () {
+    var fileInput  = document.getElementById("file-split");
+    var dropzone   = document.getElementById("drop-split");
+    var nameLabel  = document.getElementById("name-split");
+    var runBtn     = document.getElementById("run-split");
+    var rangeWrap  = document.getElementById("range-wrap-split");
+    var rangeInput = document.getElementById("range-split");
+    var progress   = document.getElementById("progress-split");
+    var fill       = document.getElementById("fill-split");
+    var statusEl   = document.getElementById("status-split");
+    var resultEl   = document.getElementById("result-split");
+
+    var selectedFile = null;
+
+    function selectedMode() {
+      var checked = document.querySelector('input[name="split-mode"]:checked');
+      return checked ? checked.value : "every";
+    }
+
+    // Show / hide the page-range input depending on the chosen mode.
+    document.querySelectorAll('input[name="split-mode"]').forEach(function (radio) {
+      radio.addEventListener("change", function () {
+        rangeWrap.hidden = selectedMode() !== "extract";
+      });
+    });
+
+    // File selection via the hidden input.
+    fileInput.addEventListener("change", function () {
+      setFile(fileInput.files[0] || null);
+    });
+
+    // Drag and drop, matching the behaviour of the other dropzones.
+    dropzone.addEventListener("dragover", function (e) {
+      e.preventDefault();
+      dropzone.classList.add("dragover");
+    });
+    dropzone.addEventListener("dragleave", function () {
+      dropzone.classList.remove("dragover");
+    });
+    dropzone.addEventListener("drop", function (e) {
+      e.preventDefault();
+      dropzone.classList.remove("dragover");
+      var f = e.dataTransfer.files[0];
+      if (f && f.type === "application/pdf") {
+        setFile(f);
+      }
+    });
+
+    function setFile(f) {
+      selectedFile = f;
+      nameLabel.textContent = f ? f.name : "";
+      resultEl.innerHTML = "";
+    }
+
+    function setProgress(pct, text) {
+      progress.hidden = false;
+      fill.style.width = Math.max(0, Math.min(100, pct)) + "%";
+      statusEl.textContent = text || "";
+    }
+
+    function fail(msg) {
+      progress.hidden = true;
+      resultEl.innerHTML = '<p class="error">' + msg + "</p>";
+    }
+
+    function baseName(name) {
+      return (name || "document").replace(/\.pdf$/i, "");
+    }
+
+    function makeDownload(blob, filename, label) {
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      // Trigger the download automatically...
+      a.click();
+      // ...and also leave a visible link in case the click was blocked.
+      var link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      link.className = "btn";
+      link.textContent = label || ("Download " + filename);
+      resultEl.innerHTML = "";
+      resultEl.appendChild(link);
+    }
+
+    // Parse strings like "1-3, 5, 8-10" into a list of 1-based page numbers,
+    // preserving the order the user typed and clamping to the page count.
+    function parseRanges(text, pageCount) {
+      var pages = [];
+      var seen = {};
+      var parts = text.split(",");
+      for (var i = 0; i < parts.length; i++) {
+        var part = parts[i].trim();
+        if (!part) continue;
+        var dash = part.indexOf("-");
+        if (dash !== -1) {
+          var start = parseInt(part.slice(0, dash).trim(), 10);
+          var end = parseInt(part.slice(dash + 1).trim(), 10);
+          if (isNaN(start) || isNaN(end)) continue;
+          if (start > end) { var t = start; start = end; end = t; }
+          for (var p = start; p <= end; p++) {
+            if (p >= 1 && p <= pageCount && !seen[p]) { pages.push(p); seen[p] = true; }
+          }
+        } else {
+          var n = parseInt(part, 10);
+          if (!isNaN(n) && n >= 1 && n <= pageCount && !seen[n]) {
+            pages.push(n);
+            seen[n] = true;
+          }
+        }
+      }
+      return pages;
+    }
+
+    runBtn.addEventListener("click", function () {
+      run().catch(function (err) {
+        console.error(err);
+        fail("Something went wrong: " + (err && err.message ? err.message : err));
+      });
+    });
+
+    async function run() {
+      resultEl.innerHTML = "";
+
+      if (!selectedFile) {
+        fail("Please choose a PDF first.");
+        return;
+      }
+      if (typeof PDFLib === "undefined") {
+        fail("The PDF library did not load. Please refresh and try again.");
+        return;
+      }
+
+      var mode = selectedMode();
+      setProgress(5, "Reading PDF…");
+
+      var bytes = await selectedFile.arrayBuffer();
+      var srcDoc = await PDFLib.PDFDocument.load(bytes, { ignoreEncryption: true });
+      var pageCount = srcDoc.getPageCount();
+      var stem = baseName(selectedFile.name);
+
+      if (mode === "extract") {
+        var wanted = parseRanges(rangeInput.value || "", pageCount);
+        if (wanted.length === 0) {
+          fail("No valid pages found. This PDF has " + pageCount +
+               ' page(s). Try something like "1-3, 5".');
+          return;
+        }
+        setProgress(40, "Extracting " + wanted.length + " page(s)…");
+        var outDoc = await PDFLib.PDFDocument.create();
+        var indices = wanted.map(function (n) { return n - 1; });
+        var copied = await outDoc.copyPages(srcDoc, indices);
+        copied.forEach(function (pg) { outDoc.addPage(pg); });
+        setProgress(80, "Saving…");
+        var outBytes = await outDoc.save();
+        setProgress(100, "Done.");
+        makeDownload(
+          new Blob([outBytes], { type: "application/pdf" }),
+          stem + "_extracted.pdf",
+          "Download " + stem + "_extracted.pdf"
+        );
+      } else {
+        // Split every page into its own PDF, then bundle into one ZIP.
+        if (typeof JSZip === "undefined") {
+          fail("The ZIP library did not load. Please refresh and try again.");
+          return;
+        }
+        var zip = new JSZip();
+        var pad = String(pageCount).length;
+        for (var i = 0; i < pageCount; i++) {
+          setProgress(5 + Math.round((i / pageCount) * 80),
+                      "Splitting page " + (i + 1) + " of " + pageCount + "…");
+          var single = await PDFLib.PDFDocument.create();
+          var pages = await single.copyPages(srcDoc, [i]);
+          single.addPage(pages[0]);
+          var singleBytes = await single.save();
+          var num = String(i + 1);
+          while (num.length < pad) { num = "0" + num; }
+          zip.file(stem + "_page_" + num + ".pdf", singleBytes);
+        }
+        setProgress(90, "Building ZIP…");
+        var zipBlob = await zip.generateAsync({ type: "blob" });
+        setProgress(100, "Done.");
+        makeDownload(zipBlob, stem + "_pages.zip",
+                     "Download " + stem + "_pages.zip");
+      }
+    }
+  })();
+  </script>
 </body>
 </html>
